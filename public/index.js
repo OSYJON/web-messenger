@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
   loadMessages()
 })
 
+let autoScrollEnabled = true;
 let socket = io()
 let replyId
 const body             = document.body
@@ -46,20 +47,21 @@ const messageContainer = document.getElementById("messages")
 const chatContainer    = document.getElementById("chat")
 
 socket.on('chat message', (message) => {
-  messages.innerHTML += messageTemplate(message)
-  let notify = document.getElementById("notify")
+  messages.innerHTML += messageTemplate(message);
+  
+  let notify = document.getElementById("notify");
   if (notify) {
-    clearTimeout(notifyTimeout) 
-    notify.remove()
+    clearTimeout(notifyTimeout); 
+    notify.remove();
   }
 
-  notify = createCustomElement("div", { id: "notify"})
-  messages.appendChild(notify)
+  notify = createCustomElement("div", { id: "notify" });
+  messages.appendChild(notify);
 
-  notifyTimeout = setTimeout(() => notify.remove() , 1000)
+  notifyTimeout = setTimeout(() => notify.remove(), 1000);
 
-  if (messages.scrollHeight-50 <= messages.scrollTop + messages.offsetHeight) scrollToBottom(true)
-})
+  scrollToBottom(true);
+});
 
 // divider not complete 
 const divider = document.getElementById("divider")
@@ -92,11 +94,14 @@ messages.addEventListener('scroll', () => {
   if (messages.scrollTop == 0) setTimeout (()=> loadOlderMessages() , 100) 
 })
 
-function scrollToBottom(transition) {
-  messages.scrollTo({
-    top: messages.scrollHeight,
-    behavior: transition ? "smooth" : "instant"
-  })
+function scrollToBottom(transition = true) {
+  // Only scroll if auto-scroll is enabled and we're near the bottom
+  if (autoScrollEnabled || messages.scrollHeight - 50 <= messages.scrollTop + messages.offsetHeight) {
+    messages.scrollTo({
+      top: messages.scrollHeight,
+      behavior: transition ? "smooth" : "instant"
+    });
+  }
 }
 
 // sending message
@@ -119,29 +124,29 @@ function loadMessages() {
 
 // Updated message template function
 function messageTemplate(message) {
-  // reply
-  let replySection = ''
-  let file = ''
-  if (message.replyId && message.repliedMessage && message.repliedUsername) 
+  // Set up the reply section if the message is a reply
+  let replySection = '';
+  let file = '';
+  if (message.replyId && message.repliedMessage && message.repliedUsername) {
     replySection = `
     <div class="replied-message-container" data-reply-id="${message.replyId}" onclick="scrollToMessage(${message.replyId})">
       <div class="replied-username">${message.repliedUsername}</div>
       <div class="replied-text"><p>${message.repliedMessage}</p></div>
-    </div>`
-
-  // files
-  if (message.filePath){
-    const fileExt = message.filePath.split('.').pop().toLowerCase();
-    if (['jpeg', 'jpg', 'png'].includes(fileExt)) file = `<img            src="uploads/${message.filePath}" class="sent image">`
-    else if (['mp4', 'avi'].includes(fileExt))    file = `<video controls src="uploads/${message.filePath}" class="sent video"></video>`
-    else if (fileExt === 'pdf')                   file = `<object        data="uploads/${message.filePath}" class="sent pdf" width="800px" height="600px"></object>`
-    // temp solution add rar and music 
-    else  file = `<a href="uploads/${message.filePath}">free robux</a>`
+    </div>`;
   }
 
-  // message
+  // Set up file attachments
+  if (message.filePath) {
+    const fileExt = message.filePath.split('.').pop().toLowerCase();
+    if (['jpeg', 'jpg', 'png'].includes(fileExt)) file = `<img src="uploads/${message.filePath}" class="sent image">`;
+    else if (['mp4', 'avi'].includes(fileExt)) file = `<video controls src="uploads/${message.filePath}" class="sent video"></video>`;
+    else if (fileExt === 'pdf') file = `<object data="uploads/${message.filePath}" class="sent pdf" width="800px" height="600px"></object>`;
+    else file = `<a href="uploads/${message.filePath}">free robux</a>`;
+  }
+
+  // Main message template with `ondblclick` to trigger reply
   return `
-    <div class="message">
+    <div class="message" ondblclick="replyToMessage(${message.messageId})"> <!-- Double-click to reply -->
       <div class="message-container">
         <div class="message-profile">
           <img src="uploads/${message.profileImage}" alt="NPC" class="user-profile">
@@ -151,12 +156,12 @@ function messageTemplate(message) {
           ${replySection}
           ${file}
           <div class="message-text" data-message-id="${message.messageId}">
-          <p>${message.message}</p>
+            <p>${message.message}</p>
           </div>
           <div class="message-detail"></div>
         </div>
       </div>
-    </div>`
+    </div>`;
 }
 
 function scrollToMessage(replyId) {
@@ -812,5 +817,46 @@ function examConfig(setOrGet,{examMode = "",grayScale = "",brightness = ""}={}){
     };
   }
 }
+
+function replyToMessage(messageId) {
+  // Find the message element to reply to
+  const targetMessage = document.querySelector(`.message-text[data-message-id="${messageId}"]`);
+  if (targetMessage) {
+    // Remove any existing reply
+    if (document.getElementById("reply-container")) removeReply();
+
+    // Set up reply container
+    replyId = messageId;
+    const replyContainer = document.createElement('div');
+    replyContainer.id = "reply-container";
+    replyContainer.style.width = getComputedStyle(input).width;
+
+    // Add reply information and close button
+    replyContainer.innerHTML = `
+      <p class="reply-username">Replying to ${targetMessage.closest('.message-container').querySelector('.username').innerText}</p>
+      <p class="reply-text">${targetMessage.innerText}</p>
+      <button id="close-reply" onclick="removeReply()">Close</button>
+    `;
+    
+    // Add the reply container above the input box
+    form.appendChild(replyContainer);
+    input.focus(); // Focus on input
+  }
+}
+
+document.addEventListener("keydown", (event) => {
+  // Toggle auto-scroll with Ctrl + F
+  if (event.ctrlKey && event.key === "f") {
+    autoScrollEnabled = !autoScrollEnabled; // Toggle auto-scroll
+
+    // Feedback message
+    if (autoScrollEnabled) {
+      console.log("Auto-scroll enabled");
+      scrollToBottom(true); // Scroll to the bottom immediately if re-enabled
+    } else {
+      console.log("Auto-scroll disabled");
+    }
+  }
+});
 
 // END exam mode functions
